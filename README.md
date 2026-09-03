@@ -50,7 +50,7 @@ npm install
 npm run dev
 ```
 
-Abre `http://localhost:5173`. Verás las 5 tarjetas de nodos actualizándose y el gráfico de potencia en vivo.
+Abrir `http://localhost:5173`.
 
 ## Endpoints del backend
 
@@ -60,13 +60,3 @@ Abre `http://localhost:5173`. Verás las 5 tarjetas de nodos actualizándose y e
 | GET    | `/api/nodes/data`        | Última lectura de los 5 nodos                 |
 | GET    | `/api/nodes/{node_id}/data` | Última lectura de un nodo específico       |
 | WS     | `/ws/nodes`               | Push en tiempo real de cada actualización     |
-
-Docs interactivas de la API: `http://localhost:8000/docs`
-
-## Próximos pasos (escalado futuro)
-
-- Persistencia real (Postgres/TimescaleDB/InfluxDB) en vez de memoria.
-- Autenticación de nodos (API key por dispositivo).
-- Endpoint de históricos con filtros por rango de fecha.
-- Modelo de IA: detección de anomalías / predicción de consumo sobre la serie temporal ya capturada.
-- Sustituir `simulator.py` por los nodos ESP32/Arduino reales publicando al mismo endpoint.
