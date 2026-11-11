@@ -1,72 +1,113 @@
-export default function DeviceDetailPanel({ node, onClose }) {
-    if (!node) return null
+// Panel de detalle de un nodo (diseño claro de la vista Dispositivos).
+// En escritorio va al lado de las tarjetas; en celular sube desde abajo.
+import { useState } from 'react'
+import EnergyChart from './EnergyChart.jsx'
+import EstadoNodo from './EstadoNodo.jsx'
+import { METRICAS, VENTANA_TIEMPO_REAL_MIN } from '../config.js'
+import {
+  MOTIVOS_REINICIO, calidadSenal, fmtDuracion, fmtHaceCuanto, fmtPotencia,
+} from '../lib/formato.js'
 
-    return (
-        <>
-            {/* Background Backdrop */}
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40" onClick={onClose} />
+function Dato({ titulo, valor, nota }) {
+  return (
+    <div className="min-w-0 py-2.5">
+      <p className="text-xs text-slate-500">{titulo}</p>
+      <p className="text-sm font-semibold text-slate-900 mt-0.5 truncate num">{valor}</p>
+      {nota && <p className="text-xs text-slate-500 truncate">{nota}</p>}
+    </div>
+  )
+}
 
-            {/* Dark Drawer Panel */}
-            <aside className="fixed top-0 right-0 h-full w-full max-w-md bg-[#0d1424] text-white shadow-2xl z-50 flex flex-col justify-between p-6 animate-in slide-in-from-right duration-300">
-                <div>
-                    {/* Header Drawer */}
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
-                        <h2 className="text-sm font-semibold text-slate-400">Detalle del dispositivo</h2>
-                        <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">✕</button>
-                    </div>
+export default function DeviceDetailPanel({ nodo, series = {}, ahora, onCerrar, onConfigurar }) {
+  const [metrica, setMetrica] = useState('potencia')
+  if (!nodo) return null
 
-                    {/* Device Title & Status */}
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 className="text-2xl font-bold uppercase tracking-tight text-white">{node.nodo}</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">Planta Norte · Línea 1</p>
-                        </div>
-                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                            Online
-                        </span>
-                    </div>
+  const info = nodo.infoEstado
+  const enLinea = info?.estado === 'online'
+  const desde = info?.desde ? Date.parse(info.desde) : null
 
-                    {/* Grid Stats */}
-                    <div className="grid grid-cols-2 gap-3 mb-6">
-                        <div className="bg-[#141d33] p-4 rounded-xl border border-slate-800">
-                            <p className="text-[11px] text-slate-400">Dirección IP</p>
-                            <p className="text-sm font-bold text-white mt-1">192.168.1.101</p>
-                        </div>
-                        <div className="bg-[#141d33] p-4 rounded-xl border border-slate-800">
-                            <p className="text-[11px] text-slate-400">Señal WiFi</p>
-                            <p className="text-sm font-bold text-white mt-1">-54 dBm</p>
-                        </div>
-                        <div className="bg-[#141d33] p-4 rounded-xl border border-slate-800">
-                            <p className="text-[11px] text-slate-400">Tiempo en línea</p>
-                            <p className="text-sm font-bold text-white mt-1">14d 08h</p>
-                        </div>
-                        <div className="bg-[#141d33] p-4 rounded-xl border border-slate-800">
-                            <p className="text-[11px] text-slate-400">Máximo histórico</p>
-                            <p className="text-sm font-bold text-white mt-1">1.24 kW</p>
-                        </div>
-                    </div>
+  let tiempo = 'Sin información'
+  let notaTiempo = null
+  if (enLinea && info.uptime_s != null && desde) {
+    tiempo = fmtDuracion(info.uptime_s + (ahora - desde) / 1000)
+    notaTiempo = 'desde el último reinicio'
+  } else if (info?.estado === 'offline' && desde) {
+    tiempo = 'Desconectado'
+    notaTiempo = fmtHaceCuanto(desde, ahora)
+  }
 
-                    {/* Mini Dark Chart Section */}
-                    <div className="bg-[#141d33] p-4 rounded-xl border border-slate-800">
-                        <p className="text-xs font-semibold text-slate-300 mb-3">Consumo en las últimas 12 horas</p>
-                        <div className="h-32 w-full text-emerald-400 flex items-center justify-center">
-                            <svg className="w-full h-full" viewBox="0 0 200 60" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <path d="M 0 45 Q 40 20, 80 35 T 160 15 T 200 10" strokeLinecap="round" />
-                            </svg>
-                        </div>
-                        <div className="flex justify-between text-[10px] text-slate-500 mt-2">
-                            <span>00:00</span>
-                            <span>Ahora</span>
-                        </div>
-                    </div>
-                </div>
+  const puntos = series[nodo.id] || []
+  const pico = puntos.length ? Math.max(...puntos.map((p) => p.potencia ?? 0)) : null
 
-                {/* Action Button */}
-                <button className="w-full bg-[#00e6a8] hover:bg-[#00c993] text-slate-950 font-bold py-3.5 rounded-xl text-sm transition-colors shadow-lg">
-                    Ver telemetría completa
+  return (
+    <>
+      {/* Fondo oscuro solo en celular */}
+      <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={onCerrar} />
+
+      <div className="fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-t-3xl lg:rounded-2xl lg:sticky lg:top-0 lg:max-h-none lg:w-80 bg-white border border-slate-200/70 p-5 shadow-xl lg:shadow-none space-y-4 flex-shrink-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex items-start gap-3">
+            <span className="w-2.5 h-2.5 mt-2 rounded-full flex-shrink-0" style={{ backgroundColor: nodo.color }} aria-hidden="true"></span>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-base text-slate-900 truncate">{nodo.nombreBase}</h3>
+              <p className="text-xs text-slate-500 truncate">{nodo.ubicacion ? `${nodo.ubicacion} (${nodo.id})` : nodo.id}</p>
+            </div>
+          </div>
+          <button
+            onClick={onCerrar}
+            aria-label="Cerrar detalle"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeWidth="2" d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+
+        <EstadoNodo estado={nodo.estado} />
+
+        <div className="grid grid-cols-2 gap-x-4 divide-y divide-slate-100 [&>*:nth-child(2)]:border-t-0">
+          <Dato titulo="Dirección IP" valor={info?.ip || 'Sin información'} />
+          <Dato
+            titulo="Señal WiFi"
+            valor={info?.rssi != null ? `${info.rssi} dBm` : 'Sin información'}
+            nota={calidadSenal(info?.rssi)}
+          />
+          <Dato titulo="Tiempo encendido" valor={tiempo} nota={notaTiempo} />
+          <Dato
+            titulo="Último reinicio"
+            valor={info?.reset ? (MOTIVOS_REINICIO[info.reset] || info.reset) : 'Sin información'}
+          />
+          <Dato titulo="Última lectura" valor={fmtHaceCuanto(nodo.tsUltimaLectura, ahora)} />
+          <Dato titulo={`Pico (${VENTANA_TIEMPO_REAL_MIN} min)`} valor={pico != null ? fmtPotencia(pico) : '--'} />
+        </div>
+
+        <div className="space-y-2 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] font-semibold text-slate-900">Últimos {VENTANA_TIEMPO_REAL_MIN} minutos</p>
+            <div className="flex gap-1">
+              {Object.entries(METRICAS).map(([clave, m]) => (
+                <button
+                  key={clave}
+                  onClick={() => setMetrica(clave)}
+                  aria-pressed={metrica === clave}
+                  className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${metrica === clave ? 'bg-primario-50 text-primario-700' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  {m.unidad}
                 </button>
-            </aside>
-        </>
-    )
+              ))}
+            </div>
+          </div>
+          <div className="w-full">
+            <EnergyChart nodos={[nodo]} series={series} metrica={metrica} altura={120} mostrarLeyenda={false} />
+          </div>
+        </div>
+
+        <button
+          onClick={() => onConfigurar(nodo.id)}
+          className="w-full py-2.5 btn-principal bg-primario-600 hover:bg-primario-700 text-white font-semibold text-sm rounded-xl transition-colors"
+        >
+          Configurar este nodo
+        </button>
+      </div>
+    </>
+  )
 }

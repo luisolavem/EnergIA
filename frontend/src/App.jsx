@@ -1,215 +1,249 @@
-import { useEffect, useRef, useState } from 'react'
-import Dashboard from './views/Dashboard.jsx'
-import Dispositivos from './views/Dispositivos.jsx'
-import Alertas from './views/Alertas.jsx'
-import Logs from './views/Logs.jsx'
+// Raíz de la app: tema, sesión y, según el rol de la cuenta, el menú y las
+// pantallas del residente o del técnico.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import AvisoEmergente from './components/AvisoEmergente.jsx'
 import ConfiguracionModal from './components/ConfiguracionModal.jsx'
+import MenuPerfil from './components/MenuPerfil.jsx'
+import { BarraLateral, BarraMovil, BarraSuperior } from './components/Navegacion.jsx'
+import { Etiqueta } from './components/ui.jsx'
+import { SECCIONES, TEMAS } from './config.js'
+import { AuthProvider, useAuth } from './context/AuthContext.jsx'
+import useAhora from './hooks/useAhora.js'
+import useEnergia from './hooks/useEnergia.js'
+import useIA from './hooks/useIA.js'
+import usePreferencias from './hooks/usePreferencias.js'
+import { TemaContext } from './hooks/useTema.js'
+import useTelemetria from './hooks/useTelemetria.js'
+import { fechaLarga, usarPotenciaEnKw } from './lib/formato.js'
+import { TIPOS_ALERTA, TIPOS_RESIDENTE, mensajeResidente } from './lib/ia.js'
+import { construirNodos, estaEnLinea } from './lib/nodos.js'
+import Login from './views/Login.jsx'
+import Ajustes from './views/residente/Ajustes.jsx'
+import Inicio from './views/residente/Inicio.jsx'
+import MisAparatos from './views/residente/MisAparatos.jsx'
+import AlertasIA from './views/tecnico/AlertasIA.jsx'
+import Nodos from './views/tecnico/Nodos.jsx'
+import Panel from './views/tecnico/Panel.jsx'
+import Registros from './views/tecnico/Registros.jsx'
 
-const DEFAULT_WS_URL = 'ws://192.168.1.28:8000/ws/nodes'
-const MAX_HISTORY_POINTS = 20
+// Indicador de la cabecera del técnico: servidor -> broker MQTT -> nodos.
+function estadoSistema(conectado, mqttConectado, nodos) {
+  const enLinea = nodos.filter(estaEnLinea).length
+  if (!conectado) return { tono: 'falla', texto: 'Servidor desconectado' }
+  if (mqttConectado === false) return { tono: 'aviso', texto: 'Broker MQTT sin conexión' }
+  if (nodos.length === 0) return { tono: 'aviso', texto: 'Sin nodos registrados' }
+  if (enLinea === 0) return { tono: 'aviso', texto: 'Ningún nodo en línea' }
+  if (enLinea < nodos.length) return { tono: 'aviso', texto: `${enLinea} de ${nodos.length} nodos en línea` }
+  return { tono: 'ok', texto: `Los ${nodos.length} nodos en línea` }
+}
 
-export default function App() {
-  const [nodes, setNodes] = useState({})
-  const [history, setHistory] = useState([])
-  const [rawLogs, setRawLogs] = useState([])
-  const [connected, setConnected] = useState(false)
-  const [activeView, setActiveView] = useState('dashboard')
-  const [selectedNodeId, setSelectedNodeId] = useState(null)
+function AppConSesion({ preferencias, guardarPreferencias }) {
+  const { usuario, token, cerrarSesion } = useAuth()
+  const esTecnico = usuario.rol === 'tecnico'
+  const urlBackend = preferencias.urlBackend
 
-  // Estados de Configuración
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [wsUrl, setWsUrl] = useState(DEFAULT_WS_URL)
-  const [kwhRate, setKwhRate] = useState(850)
-  const [theme, setTheme] = useState('cyan')
-
-  const wsRef = useRef(null)
-
+  const sesionVencida = useCallback(() => cerrarSesion('Tu sesión venció. Vuelve a entrar.'), [cerrarSesion])
+  // Alertas de la IA que llegan por el WebSocket: se agregan a la lista y se avisan en pantalla
+  const alAlertaRef = useRef(null)
+  const onAlertaIA = useCallback((alerta) => alAlertaRef.current?.(alerta), [])
+  const telemetria = useTelemetria(urlBackend, { token, esTecnico, onSesionInvalida: sesionVencida, onAlertaIA })
+  const ahora = useAhora(5000)
+  const energiaHoy = useEnergia(urlBackend, 'hoy', telemetria.conectado)
+  const energiaSemana = useEnergia(urlBackend, 'semana', telemetria.conectado)
+  const ia = useIA(urlBackend, telemetria.conectado)
+  const [avisoIA, setAvisoIA] = useState(null)
+  const cerrarAvisoIA = useCallback(() => setAvisoIA(null), [])
   useEffect(() => {
-    let cancelled = false
-    function connect() {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
-      ws.onopen = () => setConnected(true)
-      ws.onclose = () => {
-        setConnected(false)
-        if (!cancelled) setTimeout(connect, 2000)
-      }
-      ws.onerror = () => ws.close()
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.type === 'snapshot') {
-          const snapshot = {}
-          msg.data.forEach((reading) => { snapshot[reading.nodo] = reading })
-          setNodes(snapshot)
-        }
-        if (msg.type === 'update') {
-          const reading = msg.data
-          setNodes((prev) => ({ ...prev, [reading.nodo]: reading }))
-          setRawLogs((prev) => [reading, ...prev].slice(0, 200))
-          setHistory((prev) => appendReading(prev, reading))
-        }
-      }
+    alAlertaRef.current = (alerta) => {
+      ia.agregarAlerta(alerta)
+      if (esTecnico || TIPOS_RESIDENTE.has(alerta.tipo)) setAvisoIA(alerta)
     }
-    connect()
-    return () => {
-      cancelled = true
-      wsRef.current?.close()
-    }
-  }, [wsUrl])
+  }, [ia.agregarAlerta, esTecnico])
 
-  const nodeList = Object.values(nodes).sort((a, b) => a.nodo.localeCompare(b.nodo))
+  const secciones = SECCIONES[esTecnico ? 'tecnico' : 'residente']
+  const [vista, setVista] = useState(secciones[0].id)
+  const [nodoSeleccionado, setNodoSeleccionado] = useState(null)
+  const [configuracion, setConfiguracion] = useState(null) // null = cerrada
 
-  const handleNavigateToNode = (nodeId) => {
-    setSelectedNodeId(nodeId)
-    setActiveView('dispositivos')
-  }
+  const { lecturas, estados, cargas, metadatos } = telemetria
+  const nodos = useMemo(
+    () => construirNodos({ lecturas, estados, cargas, metadatos }, ahora),
+    [lecturas, estados, cargas, metadatos, ahora],
+  )
 
-  const todayFormatted = () => {
-    const d = new Date()
-    const s = d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    return s.charAt(0).toUpperCase() + s.slice(1)
-  }
+  const irANodo = (id) => { setNodoSeleccionado(id); setVista('nodos') }
+  const abrirConfiguracion = (pestana = 'conexion', nodo = null) => setConfiguracion({ pestana, nodo })
+  const cerrarConfiguracion = useCallback(() => setConfiguracion(null), [])
+
+  const seccion = secciones.find((s) => s.id === vista)
+  const estado = estadoSistema(telemetria.conectado, telemetria.mqttConectado, nodos)
+  const comunes = { nodos, tarifaKwh: preferencias.tarifaKwh, conectado: telemetria.conectado, energiaHoy, energiaSemana, avisos: preferencias.avisos, ia }
+
+  // Texto del aviso flotante (técnico: detalle; residente: en pesos y sencillo)
+  const nodoAviso = avisoIA ? nodos.find((n) => n.id === avisoIA.nodo) : null
+  const nombreAviso = nodoAviso?.nombre || avisoIA?.aparato
+  const contenidoAviso = avisoIA && (esTecnico
+    ? { color: nodoAviso?.color, titulo: `${nombreAviso}: ${(TIPOS_ALERTA[avisoIA.tipo] || TIPOS_ALERTA.inusual).texto.toLowerCase()}`, texto: avisoIA.descripcion }
+    : { color: nodoAviso?.color, titulo: 'Aviso de consumo', texto: mensajeResidente(avisoIA, nombreAviso, preferencias.tarifaKwh) })
+  // El Inicio trae su propio saludo; las demás pantallas llevan título.
+  const conTitulo = vista !== 'inicio'
 
   return (
     <div className="h-screen bg-slate-50 flex text-slate-800 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 h-full flex-shrink-0 bg-white border-r border-slate-200 flex flex-col justify-between p-4 hidden md:flex">
-        <div className="space-y-6">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div className="w-9 h-9 bg-cyan-400 rounded-xl flex items-center justify-center text-slate-900 font-bold shadow-sm">
-              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="font-bold text-base text-slate-900 tracking-tight leading-none">EnergIA</h1>
-            </div>
-          </div>
+      <BarraLateral
+        secciones={secciones}
+        vista={vista}
+        onCambiarVista={setVista}
+        usuario={usuario}
+        onAbrirConfiguracion={() => abrirConfiguracion()}
+      />
 
-          <nav className="space-y-1">
-            <button
-              onClick={() => setActiveView('dashboard')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeView === 'dashboard' ? 'bg-emerald-50 text-emerald-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <div className="flex items-center gap-3">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                Dashboard
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveView('dispositivos')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeView === 'dispositivos' ? 'bg-emerald-50 text-emerald-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <div className="flex items-center gap-3">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
-                Dispositivos
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveView('alertas')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeView === 'alertas' ? 'bg-emerald-50 text-emerald-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <div className="flex items-center gap-3">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                Alertas
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveView('logs')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeView === 'logs' ? 'bg-emerald-50 text-emerald-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <div className="flex items-center gap-3">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                Logs del Sistema
-              </div>
-            </button>
-          </nav>
-        </div>
-
-        <div className="space-y-4 pt-4 border-t border-slate-100">
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-xl transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>
-            Configuración
-          </button>
-
-          <div className="bg-slate-400/30 p-2.5 rounded-2xl flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-slate-400 text-slate-700 flex items-center justify-center font-bold text-xs">
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-800 leading-tight">Luis Olave</p>
-                <p className="text-[10px] text-slate-500">Administrador</p>
-              </div>
-            </div>
-            <button className="text-slate-400 hover:text-slate-600 px-1">•••</button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 bg-slate-50/80 backdrop-blur border-b border-slate-200/60 flex items-center justify-between px-8 flex-shrink-0">
-          <div>
-            <p className="text-[11px] text-slate-400 capitalize">{todayFormatted()}</p>
-            <h1 className="text-lg font-bold text-slate-900 capitalize">
-              {activeView === 'dashboard' ? 'Resumen energético' : activeView === 'dispositivos' ? 'Dispositivos' : activeView === 'alertas' ? 'Alertas IA' : 'Logs del Sistema'}
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2 border ${connected ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`}></span>
-              {connected ? 'Sistema operativo' : 'Desconectado'}
-            </span>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-8">
-          {activeView === 'dashboard' && <Dashboard nodeList={nodeList} history={history} onSelectNode={handleNavigateToNode} />}
-          {activeView === 'dispositivos' && (
-            <Dispositivos
-              nodeList={nodeList}
-              history={history}
-              selectedNodeId={selectedNodeId}
-              setSelectedNodeId={setSelectedNodeId}
+      <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
+        <BarraSuperior
+          grupo={seccion?.grupo}
+          titulo={seccion?.titulo}
+          perfil={(
+            <MenuPerfil
+              usuario={usuario}
+              preferencias={preferencias}
+              onGuardarPreferencias={guardarPreferencias}
+              vista={vista}
+              onIr={setVista}
+              onAbrirConfiguracion={(pestana) => abrirConfiguracion(pestana)}
+              onSalir={() => cerrarSesion()}
+              urlBackend={urlBackend}
+              conectado={telemetria.conectado}
             />
           )}
-          {activeView === 'alertas' && <Alertas />}
-          {activeView === 'logs' && <Logs rawLogs={rawLogs} />}
+          estado={esTecnico
+            ? <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta>
+            : <Etiqueta tono={telemetria.conectado ? 'ok' : 'falla'}>{telemetria.conectado ? 'Medidor conectado' : 'Medidor sin conexión'}</Etiqueta>}
+        />
+
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 pt-6 md:pt-8 pb-24 md:pb-10">
+          {conTitulo && (
+            <div className="mb-6">
+              <h1 className="text-2xl md:text-[28px] font-semibold text-slate-900 tracking-tight">{seccion?.titulo}</h1>
+              <p className="text-sm text-slate-500 mt-1">{fechaLarga()}</p>
+            </div>
+          )}
+          {vista === 'inicio' && <Inicio {...comunes} />}
+          {vista === 'aparatos' && <MisAparatos {...comunes} />}
+          {vista === 'ajustes' && (
+            <Ajustes
+              preferencias={preferencias}
+              onGuardarPreferencias={guardarPreferencias}
+              nodos={nodos}
+              urlBackend={urlBackend}
+              onMetadatoGuardado={telemetria.actualizarMetadatoLocal}
+            />
+          )}
+
+          {esTecnico && vista === 'panel' && (
+            <Panel {...comunes} series={telemetria.series} ahora={ahora} onSeleccionarNodo={irANodo} />
+          )}
+          {esTecnico && vista === 'nodos' && (
+            <Nodos
+              nodos={nodos}
+              series={telemetria.series}
+              ahora={ahora}
+              nodoSeleccionado={nodoSeleccionado}
+              setNodoSeleccionado={setNodoSeleccionado}
+              onConfigurarNodo={(id) => abrirConfiguracion('nodos', id)}
+              conectado={telemetria.conectado}
+            />
+          )}
+          {esTecnico && vista === 'alertas' && (
+            <AlertasIA
+              ia={ia}
+              nodos={nodos}
+              tarifaKwh={preferencias.tarifaKwh}
+              energiaSemana={energiaSemana}
+              urlBackend={urlBackend}
+              conectado={telemetria.conectado}
+            />
+          )}
+          {esTecnico && vista === 'registros' && (
+            <Registros paquetes={telemetria.paquetes} bitacora={telemetria.bitacora} nodos={nodos} />
+          )}
         </div>
       </main>
 
-      <ConfiguracionModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        wsUrl={wsUrl}
-        setWsUrl={setWsUrl}
-        kwhRate={kwhRate}
-        setKwhRate={setKwhRate}
-        theme={theme}
-        setTheme={setTheme}
+      <BarraMovil
+        secciones={secciones}
+        vista={vista}
+        onCambiarVista={setVista}
+        usuario={usuario}
+        onAbrirConfiguracion={() => abrirConfiguracion()}
       />
+
+      <AvisoEmergente
+        id={avisoIA?.id}
+        aviso={contenidoAviso}
+        onCerrar={cerrarAvisoIA}
+        onVer={esTecnico ? () => setVista('alertas') : null}
+      />
+
+      {esTecnico && configuracion && (
+        <ConfiguracionModal
+          pestanaInicial={configuracion.pestana}
+          nodoInicial={configuracion.nodo}
+          preferencias={preferencias}
+          onGuardarPreferencias={guardarPreferencias}
+          nodos={nodos}
+          metadatos={metadatos}
+          onMetadatoGuardado={telemetria.actualizarMetadatoLocal}
+          onCerrar={cerrarConfiguracion}
+        />
+      )}
     </div>
   )
 }
 
-function appendReading(history, reading) {
-  const time = new Date(reading.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  const last = history[history.length - 1]
-  const newData = {
-    [`${reading.nodo}_potencia`]: reading.potencia,
-    [`${reading.nodo}_voltaje`]: reading.voltaje,
-    [`${reading.nodo}_corriente`]: reading.corriente,
+function Contenido({ preferencias, guardarPreferencias }) {
+  const { usuario, verificando } = useAuth()
+  if (verificando) {
+    return (
+      <div className="h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-sm text-slate-500">Abriendo EnergIA...</p>
+      </div>
+    )
   }
+  if (!usuario) {
+    return <Login urlBackend={preferencias.urlBackend} onCambiarServidor={(url) => guardarPreferencias({ urlBackend: url })} />
+  }
+  // key: al cambiar de cuenta se reinicia todo el estado de la app
+  return <AppConSesion key={usuario.id} preferencias={preferencias} guardarPreferencias={guardarPreferencias} />
+}
 
-  if (last && last.time === time) {
-    return [...history.slice(0, -1), { ...last, ...newData }]
-  }
-  return [...history, { time, ...newData }].slice(-MAX_HISTORY_POINTS)
+// "auto": sigue el modo claro u oscuro del celular o computador
+function useSistemaOscuro() {
+  const [consulta] = useState(() => (window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null))
+  const [oscuro, setOscuro] = useState(() => Boolean(consulta?.matches))
+  useEffect(() => {
+    if (!consulta) return undefined
+    const cambio = (e) => setOscuro(e.matches)
+    consulta.addEventListener?.('change', cambio)
+    return () => consulta.removeEventListener?.('change', cambio)
+  }, [consulta])
+  return oscuro
+}
+
+export default function App() {
+  const [preferencias, guardarPreferencias] = usePreferencias()
+  const sistemaOscuro = useSistemaOscuro()
+  usarPotenciaEnKw(preferencias.potenciaKw)
+
+  // Tema: se marca en <html data-tema="..."> antes de pintar, sin parpadeo.
+  const idTema = preferencias.tema === 'auto' ? (sistemaOscuro ? 'oscuro' : 'cian') : preferencias.tema
+  const tema = TEMAS.find((t) => t.id === idTema) || TEMAS[0]
+  useLayoutEffect(() => { document.documentElement.dataset.tema = tema.id }, [tema.id])
+
+  return (
+    <TemaContext.Provider value={tema}>
+      <AuthProvider urlBackend={preferencias.urlBackend}>
+        <Contenido preferencias={preferencias} guardarPreferencias={guardarPreferencias} />
+      </AuthProvider>
+    </TemaContext.Provider>
+  )
 }

@@ -1,182 +1,332 @@
-import { useState } from 'react'
+// Configuración del sistema. Se monta solo cuando está abierta, así cada
+// apertura parte de los valores guardados.
+//   Pestaña "Conexión y costos": se guarda en el navegador.
+//   Pestaña "Estilo": el tema se aplica y se guarda al instante.
+//   Pestaña "Nodos": nombre/ubicación y parámetros de medición en el backend;
+//   el nodo recibe los parámetros por MQTT en segundos.
+//   Pestaña "Usuarios": cuentas y roles.  Pestaña "Mi cuenta": contraseña.
+// Solo la abre el técnico.
+import { useEffect, useRef, useState } from 'react'
+import { api } from '../lib/api.js'
+import { URL_BACKEND_POR_DEFECTO, limpiarUrl } from '../config.js'
+import { CambioContrasena, SelectorTema } from '../views/residente/Ajustes.jsx'
+import UsuariosPanel from './UsuariosPanel.jsx'
+import { Mensaje, claseEtiqueta, claseInput } from './ui.jsx'
 
-export default function ConfiguracionModal({ isOpen, onClose, wsUrl, setWsUrl, kwhRate, setKwhRate, theme, setTheme }) {
-    const [activeTab, setActiveTab] = useState('red')
+const CAMPOS_NODO = [
+  { clave: 'umbral_corriente_a', etiqueta: 'Corriente mínima con carga (A)', paso: 0.01, min: 0, max: 5,
+    ayuda: 'Por debajo de este valor el nodo considera el aparato apagado y deja de enviar lecturas.' },
+  { clave: 'muestras_para_reposo', etiqueta: 'Muestras para "sin carga"', paso: 1, min: 1, max: 30,
+    ayuda: 'Lecturas seguidas bajo el umbral antes de suspender el envío (evita parpadeos).' },
+  { clave: 'muestreo_ms', etiqueta: 'Muestreo del sensor (ms)', paso: 500, min: 1000, max: 60000,
+    ayuda: 'Cada cuánto se lee el PZEM. Más de 5.000 ms afecta el cálculo de energía.' },
+  { clave: 'publicar_activo_ms', etiqueta: 'Envío con carga (ms)', paso: 500, min: 1000, max: 300000,
+    ayuda: 'Cada cuánto se publica una lectura mientras el aparato está encendido.' },
+  { clave: 'umbral_voltaje_pct', etiqueta: 'Salto de voltaje que fuerza envío (%)', paso: 0.5, min: 0.5, max: 50,
+    ayuda: 'Un cambio de tensión mayor a este porcentaje se publica de inmediato.' },
+]
 
-    // Opciones de temas para la interfaz
-    const themes = [
-        { id: 'cyan', name: 'Esmeralda & Cían', primary: 'bg-cyan-500', accent: 'bg-emerald-500', desc: 'Tema predeterminado limpio' },
-        { id: 'indigo', name: 'Índigo Tech', primary: 'bg-indigo-600', accent: 'bg-violet-500', desc: 'Tonalidades violetas y profesionales' },
-        { id: 'amber', name: 'Ámbar Cálido', primary: 'bg-amber-500', accent: 'bg-orange-500', desc: 'Alto contraste con tonos cálidos' },
-        { id: 'dark', name: 'Modo Oscuro / Neón', primary: 'bg-slate-900', accent: 'bg-cyan-400', desc: 'Fondo oscuro con acentos neón' },
-    ]
 
-    if (!isOpen) return null
+export default function ConfiguracionModal({
+  pestanaInicial = 'conexion', nodoInicial = null, preferencias, onGuardarPreferencias,
+  nodos = [], metadatos = {}, onMetadatoGuardado, onCerrar,
+}) {
+  const [pestana, setPestana] = useState(pestanaInicial)
 
-    return (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            {/* Container Principal del Modal */}
-            <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+  // --- Conexión y costos ---
+  const [url, setUrl] = useState(preferencias.urlBackend)
+  const [tarifa, setTarifa] = useState(String(preferencias.tarifaKwh))
+  const [mensajeConexion, setMensajeConexion] = useState(null)
 
-                {/* Cabecera Modal */}
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                    <div>
-                        <h2 className="font-bold text-slate-900 text-lg">Configuración del Sistema</h2>
-                        <p className="text-xs text-slate-400">Ajusta parámetros de red, alertas y apariencia visual</p>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors text-sm font-bold"
-                    >
-                        ✕
-                    </button>
-                </div>
+  // --- Nodos ---
+  const [nodoId, setNodoId] = useState(nodoInicial || nodos[0]?.id || '')
+  const [meta, setMeta] = useState({ nombre: '', ubicacion: '' })
+  const [cfg, setCfg] = useState(null)
+  const [mensajeNodo, setMensajeNodo] = useState(null)
+  const [guardando, setGuardando] = useState(false)
 
-                {/* Menú de Navegación Pestañas */}
-                <div className="flex border-b border-slate-100 bg-slate-50/30 px-6 pt-2 gap-4 text-xs font-semibold">
-                    <button
-                        onClick={() => setActiveTab('red')}
-                        className={`pb-3 border-b-2 transition-colors ${activeTab === 'red' ? 'border-cyan-500 text-cyan-600 font-bold' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                    >
-                        Red & Costos
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('alertas')}
-                        className={`pb-3 border-b-2 transition-colors ${activeTab === 'alertas' ? 'border-cyan-500 text-cyan-600 font-bold' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                    >
-                        Nodos & Umbrales
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('apariencia')}
-                        className={`pb-3 border-b-2 transition-colors ${activeTab === 'apariencia' ? 'border-cyan-500 text-cyan-600 font-bold' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                    >
-                        Apariencia & Tema
-                    </button>
-                </div>
+  const metadatosRef = useRef(metadatos)
+  useEffect(() => { metadatosRef.current = metadatos }, [metadatos])
 
-                {/* Contenido Dinámico por Pestaña */}
-                <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-700">
+  useEffect(() => {
+    const cerrarConEsc = (e) => { if (e.key === 'Escape') onCerrar() }
+    window.addEventListener('keydown', cerrarConEsc)
+    return () => window.removeEventListener('keydown', cerrarConEsc)
+  }, [onCerrar])
 
-                    {/* TAB 1: Red y Costos */}
-                    {activeTab === 'red' && (
-                        <div className="space-y-5">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Servidor WebSocket Backend</label>
-                                <input
-                                    type="text"
-                                    value={wsUrl}
-                                    onChange={(e) => setWsUrl(e.target.value)}
-                                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all"
-                                    placeholder="ws://192.168.1.28:8000/ws/nodes"
-                                />
-                                <p className="text-[11px] text-slate-400 mt-1">Dirección IP y puerto donde corre el servicio FastAPI / Node.js.</p>
-                            </div>
+  // Al elegir un nodo se cargan sus datos actuales del backend.
+  useEffect(() => {
+    if (!nodoId) return undefined
+    const m = metadatosRef.current[nodoId] || {}
+    setMeta({ nombre: m.nombre || '', ubicacion: m.ubicacion || '' })
+    setCfg(null)
+    setMensajeNodo(null)
+    let vigente = true
+    api.configNodo(preferencias.urlBackend, nodoId)
+      .then((c) => { if (vigente) setCfg(c) })
+      .catch(() => { if (vigente) setMensajeNodo({ tipo: 'error', texto: 'No se pudo leer la configuración del nodo desde el servidor.' }) })
+    return () => { vigente = false }
+  }, [nodoId, preferencias.urlBackend])
 
-                            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Tarifa kWh ($)</label>
-                                    <input
-                                        type="number"
-                                        value={kwhRate}
-                                        onChange={(e) => setKwhRate(e.target.value)}
-                                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all"
-                                        placeholder="850"
-                                    />
-                                    <p className="text-[11px] text-slate-400 mt-1">Costo por kilovatio-hora para proyecciones financieras.</p>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Moneda Local</label>
-                                    <select className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all">
-                                        <option value="COP">COP ($ - Peso Colombiano)</option>
-                                        <option value="USD">USD ($ - Dólar)</option>
-                                        <option value="EUR">EUR (€ - Euro)</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+  const probarConexion = async () => {
+    setMensajeConexion({ tipo: 'info', texto: 'Probando conexión...' })
+    try {
+      const r = await api.salud(limpiarUrl(url))
+      setMensajeConexion({
+        tipo: r.mqtt_conectado ? 'ok' : 'error',
+        texto: r.mqtt_conectado
+          ? 'Servidor encontrado y broker MQTT activo.'
+          : 'El servidor responde, pero no está conectado al broker MQTT.',
+      })
+    } catch {
+      setMensajeConexion({ tipo: 'error', texto: 'No hay respuesta en esa dirección. Revisa la IP y que el backend esté encendido.' })
+    }
+  }
 
-                    {/* TAB 2: Nodos y Umbrales de Alerta */}
-                    {activeTab === 'alertas' && (
-                        <div className="space-y-5">
-                            <p className="text-xs text-slate-500">Define los valores límite para que el backend dispare notificaciones cuando un parámetro se exceda.</p>
+  const guardarConexion = () => {
+    const valorTarifa = Number(tarifa)
+    if (!(valorTarifa > 0)) {
+      setMensajeConexion({ tipo: 'error', texto: 'La tarifa debe ser un número mayor que cero.' })
+      return
+    }
+    onGuardarPreferencias({ urlBackend: limpiarUrl(url) || URL_BACKEND_POR_DEFECTO, tarifaKwh: valorTarifa })
+    onCerrar()
+  }
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Voltaje Mínimo (V)</label>
-                                    <input
-                                        type="number"
-                                        defaultValue={105}
-                                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Voltaje Máximo (V)</label>
-                                    <input
-                                        type="number"
-                                        defaultValue={135}
-                                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all"
-                                    />
-                                </div>
-                            </div>
+  const guardarNodo = async () => {
+    if (!nodoId) return
+    if (cfg && CAMPOS_NODO.some((c) => !Number.isFinite(Number(cfg[c.clave])))) {
+      setMensajeNodo({ tipo: 'error', texto: 'Revisa los parámetros: todos deben ser números.' })
+      return
+    }
+    setGuardando(true)
+    setMensajeNodo(null)
+    try {
+      const datosMeta = { nombre: meta.nombre.trim(), ubicacion: meta.ubicacion.trim() }
+      await api.guardarMetadatos(preferencias.urlBackend, nodoId, datosMeta)
+      onMetadatoGuardado(nodoId, datosMeta)
+      if (cfg) {
+        const numeros = Object.fromEntries(CAMPOS_NODO.map((c) => [c.clave, Number(cfg[c.clave])]))
+        const r = await api.guardarConfigNodo(preferencias.urlBackend, nodoId, { ...cfg, ...numeros })
+        setMensajeNodo({
+          tipo: 'ok',
+          texto: r.nodo_notificado
+            ? 'Guardado. El nodo aplicará los parámetros en unos segundos.'
+            : 'Guardado. El nodo tomará los parámetros cuando se vuelva a conectar.',
+        })
+      } else {
+        setMensajeNodo({ tipo: 'ok', texto: 'Nombre y ubicación guardados.' })
+      }
+    } catch {
+      setMensajeNodo({ tipo: 'error', texto: 'No se pudo guardar (valores fuera de rango o servidor sin conexión).' })
+    } finally {
+      setGuardando(false)
+    }
+  }
 
-                            <div className="pt-2 border-t border-slate-100">
-                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Potencia Máxima por Nodo (W)</label>
-                                <input
-                                    type="number"
-                                    defaultValue={2500}
-                                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all"
-                                />
-                                <p className="text-[11px] text-slate-400 mt-1">Límite recomendado de sobrecarga antes de notificar.</p>
-                            </div>
-                        </div>
-                    )}
+  const pestanas = [
+    { id: 'conexion', texto: 'Conexión y costos' },
+    { id: 'nodos', texto: 'Nodos' },
+    { id: 'usuarios', texto: 'Usuarios' },
+    { id: 'estilo', texto: 'Estilo' },
+    { id: 'cuenta', texto: 'Mi cuenta' },
+  ]
 
-                    {/* TAB 3: Apariencia y Selector de Temas */}
-                    {activeTab === 'apariencia' && (
-                        <div className="space-y-4">
-                            <p className="text-xs text-slate-500">Elige la combinación cromática que mejor se adapte a tu monitor o preferencia visual:</p>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {themes.map((t) => (
-                                    <button
-                                        key={t.id}
-                                        onClick={() => setTheme(t.id)}
-                                        className={`p-4 rounded-2xl border text-left flex items-start justify-between transition-all ${theme === t.id ? 'border-cyan-500 bg-cyan-50/30 ring-2 ring-cyan-500/20' : 'border-slate-200/80 bg-white hover:border-slate-300'}`}
-                                    >
-                                        <div>
-                                            <h4 className="font-bold text-xs text-slate-800">{t.name}</h4>
-                                            <p className="text-[10px] text-slate-400 mt-1">{t.desc}</p>
-                                        </div>
-                                        <div className="flex gap-1.5 items-center">
-                                            <span className={`w-3.5 h-3.5 rounded-full ${t.primary}`}></span>
-                                            <span className={`w-3.5 h-3.5 rounded-full ${t.accent}`}></span>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                </div>
-
-                {/* Footer Modal con Acción de Guardar */}
-                <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/60 transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={onClose}
-                        className="px-5 py-2 rounded-xl text-xs font-bold bg-cyan-400 text-slate-900 hover:bg-cyan-300 transition-colors shadow-sm"
-                    >
-                        Guardar Cambios
-                    </button>
-                </div>
-
-            </div>
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4" onClick={onCerrar}>
+      <div
+        className="bg-white rounded-2xl shadow-xl border border-slate-200/70 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titulo-configuracion"
+      >
+        {/* Cabecera */}
+        <div className="px-6 pt-5 pb-3 flex items-center justify-between">
+          <h2 id="titulo-configuracion" className="font-semibold text-slate-900 text-lg">Configuración</h2>
+          <button
+            onClick={onCerrar}
+            aria-label="Cerrar"
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 flex items-center justify-center"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeWidth="2" d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
         </div>
-    )
+
+        {/* Pestañas */}
+        <div className="flex border-b border-slate-200/70 px-6 gap-5 text-sm overflow-x-auto" role="tablist">
+          {pestanas.map((p) => (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={pestana === p.id}
+              onClick={() => setPestana(p.id)}
+              className={`pb-2.5 border-b-2 whitespace-nowrap transition-colors ${pestana === p.id ? 'border-primario-600 text-slate-900 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+            >
+              {p.texto}
+            </button>
+          ))}
+        </div>
+
+        {/* Contenido */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-700">
+          {pestana === 'usuarios' && <UsuariosPanel urlBackend={preferencias.urlBackend} />}
+          {pestana === 'cuenta' && <CambioContrasena urlBackend={preferencias.urlBackend} />}
+          {pestana === 'conexion' && (
+            <div className="space-y-5">
+              <div>
+                <label className={claseEtiqueta} htmlFor="cfg-url">Servidor backend</label>
+                <div className="flex gap-2">
+                  <input
+                    id="cfg-url"
+                    type="text"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    className={`${claseInput} num`}
+                    placeholder="http://192.168.1.28:8000"
+                  />
+                  <button
+                    onClick={probarConexion}
+                    className="px-4 rounded-xl text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap"
+                  >
+                    Probar
+                  </button>
+                </div>
+                <p className="text-[13px] text-slate-500 mt-1.5">
+                  IP y puerto de la Raspberry donde corre FastAPI. El cambio se aplica al guardar.{' '}
+                  <button className="text-primario-700 font-medium hover:underline" onClick={() => setUrl(URL_BACKEND_POR_DEFECTO)}>
+                    Usar valor por defecto
+                  </button>
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <label className={claseEtiqueta} htmlFor="cfg-tarifa">Tarifa kWh (COP)</label>
+                <input
+                  id="cfg-tarifa"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={tarifa}
+                  onChange={(e) => setTarifa(e.target.value)}
+                  className={claseInput}
+                  placeholder="850"
+                />
+                <p className="text-[13px] text-slate-500 mt-1.5">Valor del kWh en la factura (según el estrato). Se usa para estimar los costos.</p>
+              </div>
+
+              <Mensaje mensaje={mensajeConexion} />
+            </div>
+          )}
+
+          {pestana === 'estilo' && (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">Se aplica al instante y queda guardado en este navegador.</p>
+              <SelectorTema temaActual={preferencias.tema} onElegir={(tema) => onGuardarPreferencias({ tema })} />
+              <p className="text-[13px] text-slate-500">
+                Los colores de estado y el color de cada nodo se mantienen en todos los temas, para que su significado no cambie.
+              </p>
+            </div>
+          )}
+
+          {pestana === 'nodos' && (
+            nodos.length === 0 ? (
+              <p className="text-[13px] text-slate-500 text-center py-6">Aún no hay nodos registrados en el servidor.</p>
+            ) : (
+              <div className="space-y-5">
+                <div>
+                  <label className={claseEtiqueta} htmlFor="cfg-nodo">Nodo</label>
+                  <select id="cfg-nodo" value={nodoId} onChange={(e) => setNodoId(e.target.value)} className={claseInput}>
+                    {nodos.map((n) => <option key={n.id} value={n.id}>{n.nombre} ({n.id})</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={claseEtiqueta} htmlFor="cfg-nombre">Electrodoméstico</label>
+                    <input
+                      id="cfg-nombre"
+                      type="text"
+                      maxLength={40}
+                      value={meta.nombre}
+                      onChange={(e) => setMeta((m) => ({ ...m, nombre: e.target.value }))}
+                      className={claseInput}
+                      placeholder="Ej.: Nevera"
+                    />
+                  </div>
+                  <div>
+                    <label className={claseEtiqueta} htmlFor="cfg-ubicacion">Ubicación</label>
+                    <input
+                      id="cfg-ubicacion"
+                      type="text"
+                      maxLength={40}
+                      value={meta.ubicacion}
+                      onChange={(e) => setMeta((m) => ({ ...m, ubicacion: e.target.value }))}
+                      className={claseInput}
+                      placeholder="Ej.: Cocina"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 space-y-4">
+                  <p className="text-sm font-semibold text-slate-900">Parámetros de medición (se envían al ESP32)</p>
+                  {!cfg ? (
+                    <p className="text-[13px] text-slate-500">Cargando parámetros...</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {CAMPOS_NODO.map((c) => (
+                        <div key={c.clave}>
+                          <label className={claseEtiqueta} htmlFor={`cfg-${c.clave}`}>{c.etiqueta}</label>
+                          <input
+                            id={`cfg-${c.clave}`}
+                            type="number"
+                            step={c.paso}
+                            min={c.min}
+                            max={c.max}
+                            value={cfg[c.clave] ?? ''}
+                            onChange={(e) => setCfg((prev) => ({ ...prev, [c.clave]: e.target.value }))}
+                            className={claseInput}
+                          />
+                          <p className="text-[13px] text-slate-500 mt-1.5">{c.ayuda}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Mensaje mensaje={mensajeNodo} />
+              </div>
+            )
+          )}
+        </div>
+
+        {/* Pie */}
+        <div className="px-6 py-4 border-t border-slate-200/70 flex items-center justify-end gap-3">
+          <button
+            onClick={onCerrar}
+            className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            {pestana === 'conexion' ? 'Cancelar' : 'Cerrar'}
+          </button>
+          {pestana === 'conexion' && (
+            <button
+              onClick={guardarConexion}
+              className="px-5 py-2 rounded-xl text-sm font-semibold btn-principal bg-primario-600 text-white hover:bg-primario-700 transition-colors"
+            >
+              Guardar cambios
+            </button>
+          )}
+          {pestana === 'nodos' && (
+            <button
+              onClick={guardarNodo}
+              disabled={guardando || !nodoId}
+              className="px-5 py-2 rounded-xl text-sm font-semibold btn-principal bg-primario-600 text-white hover:bg-primario-700 transition-colors disabled:opacity-50"
+            >
+              {guardando ? 'Guardando...' : 'Guardar nodo'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }

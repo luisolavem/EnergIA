@@ -1,57 +1,76 @@
-export default function NodeCard({ node, onClick }) {
-  const isOnline = node.potencia > 0.5
+// Tarjeta de un nodo para el técnico.
+//   "compacto" (Panel técnico): nombre, potencia y su curva de los últimos
+//   30 minutos al pie. El estado solo se escribe en una palabra.
+//   "completo" (Nodos): además voltaje y corriente.
+import EstadoNodo from './EstadoNodo.jsx'
+import { PuntoAparato } from './ui.jsx'
+import { curvaPotencia } from '../lib/curvas.js'
+import { fmtNumero, fmtPotencia } from '../lib/formato.js'
+import { ESTADO } from '../lib/nodos.js'
+
+const ESTADO_CORTO = {
+  [ESTADO.ACTIVO]: { texto: 'En línea', clase: 'text-emerald-700' },
+  [ESTADO.SIN_CARGA]: { texto: 'Sin carga', clase: 'text-slate-500' },
+  [ESTADO.SIN_DATOS]: { texto: 'Sin datos', clase: 'text-amber-700' },
+  [ESTADO.DESCONECTADO]: { texto: 'Desconectado', clase: 'text-red-700' },
+}
+
+function Medida({ titulo, valor }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-slate-500">{titulo}</p>
+      <p className="text-sm font-semibold text-slate-900 truncate">{valor}</p>
+    </div>
+  )
+}
+
+export default function NodeCard({ nodo, series = {}, ahora, variante = 'compacto', seleccionado = false, onClick }) {
+  const borde = seleccionado ? 'border-primario-500 ring-2 ring-primario-500/15' : 'border-slate-200 hover:border-slate-300'
+
+  if (variante === 'completo') {
+    return (
+      <button type="button" onClick={onClick} className={`w-full text-left rounded-xl border bg-white p-4 transition-colors ${borde}`}>
+        <div className="flex items-start gap-2.5">
+          <PuntoAparato color={nodo.color} className="mt-1.5" />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-slate-900 truncate">{nodo.nombreBase}</h3>
+            <p className="text-[13px] text-slate-500 truncate">{nodo.ubicacion ? `${nodo.ubicacion} (${nodo.id})` : nodo.id}</p>
+          </div>
+        </div>
+        <div className="mt-3"><EstadoNodo estado={nodo.estado} /></div>
+        <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-100">
+          <Medida titulo="Potencia" valor={fmtPotencia(nodo.potencia)} />
+          <Medida titulo="Voltaje" valor={nodo.voltaje == null ? '--' : `${fmtNumero(nodo.voltaje, 1)} V`} />
+          <Medida titulo="Corriente" valor={nodo.corriente == null ? '--' : `${fmtNumero(nodo.corriente, 2)} A`} />
+        </div>
+      </button>
+    )
+  }
+
+  const estado = ESTADO_CORTO[nodo.estado] || ESTADO_CORTO[ESTADO.SIN_DATOS]
+  const curva = curvaPotencia(series[nodo.id], ahora, 200, 54)
+  const sinValor = nodo.potencia == null
+  const [cifra, unidad] = sinValor ? ['--', ''] : fmtPotencia(nodo.potencia).split(' ')
 
   return (
-    <div
-      onClick={onClick}
-      className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
-    >
-      <div>
-        {/* Superior: Icono, Nombre y Pill Online */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-900 text-cyan-400 rounded-xl flex items-center justify-center font-bold text-xs shadow-inner">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-slate-800 leading-tight uppercase">{node.nodo}</h3>
-              <p className="text-[11px] text-slate-400">Planta Norte · Línea 1</p>
-            </div>
-          </div>
-
-          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${isOnline ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-900 text-slate-300'}`}>
-            {isOnline ? 'Online' : 'Offline'}
-          </span>
-        </div>
-
-        {/* Potencia Actual & Mini Sparkline */}
-        <div className="flex items-end justify-between my-2">
-          <div>
-            <p className="text-[11px] text-slate-400 font-medium">Potencia actual</p>
-            <p className="text-2xl font-bold text-slate-900 tracking-tight">
-              {isOnline ? node.potencia.toFixed(0) : '--'} <span className="text-xs font-normal text-slate-500">W</span>
-            </p>
-          </div>
-
-          {/* Mini Sparkline Line graphic */}
-          <div className="w-24 h-8 text-cyan-500 flex items-center justify-end">
-            <svg className="w-full h-full" viewBox="0 0 100 30" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M 0 25 Q 20 10, 40 20 T 80 5 T 100 15" strokeLinecap="round" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer Card */}
-      <div className="border-t border-slate-100 pt-3 mt-3 flex items-center justify-between text-[11px] text-slate-400 font-medium">
-        <span className="flex items-center gap-1">
-          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" /></svg>
-          -54 dBm
+    <button type="button" onClick={onClick} className={`w-full text-left rounded-2xl border bg-white overflow-hidden transition-colors ${borde}`}>
+      <div className="px-4 pt-4">
+        <span className="flex items-center gap-2 min-w-0" title={nodo.nombre}>
+          <PuntoAparato color={nodo.color} className="w-2 h-2" />
+          <span className="text-sm font-medium text-slate-700 truncate">{nodo.nombre}</span>
         </span>
-        <span>Uptime 14d 06h</span>
+        <div className="mt-2.5 flex items-end justify-between gap-2">
+          <p className={`text-[26px] leading-none font-semibold tracking-tight ${sinValor ? 'text-slate-400' : 'text-slate-900'}`}>
+            {cifra}{unidad && <span className="text-sm font-medium text-slate-400 ml-1">{unidad}</span>}
+          </p>
+          <span className={`text-xs whitespace-nowrap ${estado.clase}`}>{estado.texto}</span>
+        </div>
       </div>
-    </div>
+      <svg viewBox="0 0 200 54" preserveAspectRatio="none" className="block w-full h-[54px] mt-2" aria-hidden="true">
+        {curva.area && <path d={curva.area} fill={nodo.color} fillOpacity="0.12" />}
+        {curva.linea && <path d={curva.linea} fill="none" stroke={nodo.color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />}
+        {!curva.linea && <line x1="0" x2="200" y1="52" y2="52" stroke="rgb(var(--slate-200))" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />}
+      </svg>
+    </button>
   )
 }

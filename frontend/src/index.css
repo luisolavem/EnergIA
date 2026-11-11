@@ -2,6 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   Temas de color. El tema activo se indica en <html data-tema="...">.
+   Los valores son canales RGB ("R G B") para que Tailwind pueda aplicar
+   transparencias (por ejemplo bg-primario-500/20).
+   ========================================================================== */
+
+/* --- Esmeralda & Cian (predeterminado) --- */
+:root,
+[data-tema='cian'] {
+  --primario-50: 236 254 255;  --primario-100: 207 250 254; --primario-200: 165 243 252;
+  --primario-300: 103 232 249; --primario-400: 34 211 238;  --primario-500: 6 182 212;
+  --primario-600: 8 145 178;   --primario-700: 14 116 144;  --primario-800: 21 94 117;
+  --primario-900: 22 78 99;    --primario-950: 8 51 68;
+
+  --secundario-50: 236 253 245;  --secundario-100: 209 250 229; --secundario-200: 167 243 208;
+  --secundario-300: 110 231 183; --secundario-400: 52 211 153;  --secundario-500: 16 185 129;
+  --secundario-600: 5 150 105;   --secundario-700: 4 120 87;    --secundario-800: 6 95 70;
+  --secundario-900: 6 78 59;     --secundario-950: 2 44 34;
+}
+
+/* Grises del modo claro (compartidos por los tres temas claros) */
+:root {
+  --slate-50: 248 250 252;  --slate-100: 241 245 249; --slate-200: 226 232 240;
+  --slate-300: 203 213 225; --slate-400: 148 163 184; --slate-500: 100 116 139;
+  --slate-600: 71 85 105;   --slate-700: 51 65 85;    --slate-800: 30 41 59;
+  --slate-900: 15 23 42;    --slate-950: 2 6 23;
+  --blanco: 255 255 255;
+  --tinta: 15 23 42;
+}
+
+/* --- Índigo Tech --- */
+[data-tema='indigo'] {
+  --primario-50: 238 242 255;  --primario-100: 224 231 255; --primario-200: 199 210 254;
+  --primario-300: 165 180 252; --primario-400: 129 140 248; --primario-500: 99 102 241;
+  --primario-600: 79 70 229;   --primario-700: 67 56 202;   --primario-800: 55 48 163;
+  --primario-900: 49 46 129;   --primario-950: 30 27 75;
+
+  --secundario-50: 245 243 255;  --secundario-100: 237 233 254; --secundario-200: 221 214 254;
+  --secundario-300: 196 181 253; --secundario-400: 167 139 250; --secundario-500: 139 92 246;
+  --secundario-600: 124 58 237;  --secundario-700: 109 40 217;  --secundario-800: 91 33 182;
+  --secundario-900: 76 29 149;   --secundario-950: 46 16 101;
+}
+
+/* --- Ámbar Cálido --- */
+[data-tema='ambar'] {
+  --primario-50: 255 251 235;  --primario-100: 254 243 199; --primario-200: 253 230 138;
+  --primario-300: 252 211 77;  --primario-400: 251 191 36;  --primario-500: 245 158 11;
+  --primario-600: 217 119 6;   --primario-700: 180 83 9;    --primario-800: 146 64 14;
+  --primario-900: 120 53 15;   --primario-950: 69 26 3;
+
+  --secundario-50: 255 247 237;  --secundario-100: 255 237 213; --secundario-200: 254 215 170;
+  --secundario-300: 253 186 116; --secundario-400: 251 146 60;  --secundario-500: 249 115 22;
+  --secundario-600: 234 88 12;   --secundario-700: 194 65 12;   --secundario-800: 154 52 18;
+  --secundario-900: 124 45 18;   --secundario-950: 67 20 7;
+}
+
+/* --- Modo Oscuro / Neón ---
+   La escala de grises se invierte: los fondos claros pasan a ser oscuros y los
+   textos oscuros pasan a ser claros. Los acentos se aclaran para que brillen. */
+[data-tema='oscuro'] {
+  color-scheme: dark; /* barras de desplazamiento y listas desplegables oscuras */
+
+  --slate-50: 2 6 23;       --slate-100: 30 41 59;    --slate-200: 51 65 85;
+  --slate-300: 71 85 105;   --slate-400: 148 163 184; --slate-500: 148 163 184;
+  --slate-600: 203 213 225; --slate-700: 226 232 240; --slate-800: 241 245 249;
+  --slate-900: 248 250 252; --slate-950: 255 255 255;
+  --blanco: 15 23 42;
+  --tinta: 30 41 59;
+
+  --primario-50: 8 51 68;      --primario-100: 22 78 99;    --primario-200: 21 94 117;
+  --primario-300: 103 232 249; --primario-400: 34 211 238;  --primario-500: 6 182 212;
+  --primario-600: 34 211 238;  --primario-700: 103 232 249; --primario-800: 165 243 252;
+  --primario-900: 207 250 254; --primario-950: 236 254 255;
+
+  --secundario-50: 2 44 34;      --secundario-100: 6 78 59;     --secundario-200: 6 95 70;
+  --secundario-300: 110 231 183; --secundario-400: 52 211 153;  --secundario-500: 16 185 129;
+  --secundario-600: 52 211 153;  --secundario-700: 110 231 183; --secundario-800: 167 243 208;
+  --secundario-900: 209 250 229; --secundario-950: 236 253 245;
+}
+
+/* Colores de estado (verde, ámbar, rojo) en modo oscuro: mismo significado,
+   pero con fondos oscuros para que no deslumbren. */
+[data-tema='oscuro'] .bg-emerald-50   { background-color: rgb(2 44 34); }
+[data-tema='oscuro'] .text-emerald-600 { color: rgb(52 211 153); }
+[data-tema='oscuro'] .text-emerald-700 { color: rgb(110 231 183); }
+[data-tema='oscuro'] .border-emerald-200 { border-color: rgb(6 95 70); }
+[data-tema='oscuro'] .bg-amber-50     { background-color: rgb(69 26 3); }
+[data-tema='oscuro'] .text-amber-700  { color: rgb(252 211 77); }
+[data-tema='oscuro'] .border-amber-200 { border-color: rgb(146 64 14); }
+[data-tema='oscuro'] .bg-red-50       { background-color: rgb(69 10 10); }
+[data-tema='oscuro'] .text-red-700    { color: rgb(252 165 165); }
+[data-tema='oscuro'] .border-red-200  { border-color: rgb(153 27 27); }
+
 body {
-  @apply bg-slate-950;
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* Cifras con ancho fijo: no "bailan" cuando el valor se actualiza */
+.num { font-variant-numeric: tabular-nums; }
+
+/* Foco visible con teclado en toda la app */
+:focus-visible { outline: 2px solid rgb(var(--primario-500)); outline-offset: 2px; border-radius: 6px; }
+
+/* Horas que aún no pasan en las barras por hora */
+.rayado {
+  background-image: repeating-linear-gradient(135deg, rgb(var(--slate-200)) 0 2px, transparent 2px 6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
