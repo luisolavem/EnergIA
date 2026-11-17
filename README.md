@@ -38,7 +38,7 @@ Cinco nodos ESP32 con sensores PZEM-004T miden cada 2 segundos el voltaje, la co
 ```
 
 El conjunto de datos no está en el repositorio por su tamaño. Se encuentra en
-[Google Drive](https://drive.google.com/drive/folders/1TWDelUgQVsnPHFuUo1kMX5Vtp2X6_Z7U).
+[Google Drive](https://drive.google.com/drive/folders/1elM213b-uulqLfFFP1w3J4KF4dxNvpI1?usp=drive_link).
 
 ## Arquitectura
 
