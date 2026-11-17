@@ -30,6 +30,27 @@ export function horasPrevistas(prediccion) {
   })
 }
 
+// Próximos 7 días (hoy con lo ya consumido + los 6 días siguientes), por día y por nodo.
+// Devuelve null si el backend todavía tiene los modelos de 24 horas.
+export function semanaPrevista(prediccion) {
+  const semana = prediccion?.disponible ? prediccion.semana : null
+  if (!semana?.dias?.length) return null
+  const mapa = nodoDe(prediccion)
+  const dias = semana.dias.map((d) => {
+    const valores = {}
+    for (const [aparato, kwh] of Object.entries(d.aparatos || {})) valores[mapa[aparato] || aparato] = kwh
+    // "2026-11-11" en hora local (sin pasar por UTC)
+    const [y, m, dd] = d.fecha.split('-').map(Number)
+    return { t: new Date(y, m - 1, dd).getTime(), kwh: d.kwh, valores, hoy: d.incluye_consumido }
+  })
+  const porNodo = {}
+  for (const d of dias) for (const [n, kwh] of Object.entries(d.valores)) porNodo[n] = (porNodo[n] || 0) + kwh
+  return { dias, total: semana.total_kwh, porNodo, error: semana.error_esperado_pct }
+}
+
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+export const nombreDia = (t, esHoy) => (esHoy ? 'Hoy' : DIAS_CORTOS[new Date(t).getDay()])
+
 // kWh que la IA espera desde ahora hasta la medianoche, total y por nodo.
 // De la hora en curso solo se cuenta la parte que falta (lo demás ya está
 // en el consumo medido de hoy).

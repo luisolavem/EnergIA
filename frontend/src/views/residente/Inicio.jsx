@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import AvisosIA from '../../components/AvisosIA.jsx'
 import BarrasHora from '../../components/BarrasHora.jsx'
 import PrediccionHoy from '../../components/PrediccionHoy.jsx'
+import PrediccionSemana from '../../components/PrediccionSemana.jsx'
 import RankingAparatos from '../../components/RankingAparatos.jsx'
 import { Etiqueta, Icono, Indicador, Tarjeta } from '../../components/ui.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -135,6 +136,8 @@ export default function Inicio({ nodos = [], tarifaKwh, conectado, energiaHoy, e
           nota={encendidos.length === 0 ? 'Ningún aparato encendido' : encendidos.map((n) => n.nombre).join(', ')}
         />
       </div>
+
+      <PrediccionSemana prediccion={ia?.prediccion} tarifaKwh={tarifaKwh} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-4 md:gap-5">
         <Tarjeta titulo="Tus aparatos hoy" descripcion="Ordenados por lo que llevan costando.">

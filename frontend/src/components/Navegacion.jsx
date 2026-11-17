@@ -1,6 +1,6 @@
 // Navegación: barra superior (cuenta y estado), barra lateral en escritorio
 // y barra inferior en celular. El menú depende del rol (config.js -> SECCIONES).
-import { Marca } from './ui.jsx'
+import { LogoEnergia, Marca } from './ui.jsx'
 
 const ICONOS = {
   inicio: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5Z',
@@ -72,9 +72,7 @@ export function BarraSuperior({ grupo, titulo, estado, perfil }) {
   return (
     <header className="h-[60px] md:h-[68px] flex-shrink-0 bg-white border-b border-slate-200/80 px-4 md:px-8 flex items-center justify-between gap-3 relative z-20">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="md:hidden w-8 h-8 rounded-lg bg-primario-500 text-white flex items-center justify-center flex-shrink-0">
-          <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" /></svg>
-        </div>
+        <LogoEnergia className="md:hidden w-8 h-8 flex-shrink-0" />
         <p className="text-sm truncate">
           {grupo && <span className="text-slate-500 hidden sm:inline">{grupo} <span aria-hidden="true">/</span> </span>}
           <span className="font-medium text-slate-900">{titulo}</span>

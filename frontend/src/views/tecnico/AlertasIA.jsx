@@ -8,7 +8,7 @@ import {
 } from '../../components/ui.jsx'
 import { api } from '../../lib/api.js'
 import { fmtFechaHora, fmtHaceCuanto, fmtMoneda, fmtNumero } from '../../lib/formato.js'
-import { TIPOS_ALERTA, diaRelativo, fmtWh, franja } from '../../lib/ia.js'
+import { TIPOS_ALERTA, diaRelativo, fmtWh, franja, semanaPrevista } from '../../lib/ia.js'
 
 const REFRESCO_MODELOS_MS = 5 * 60_000
 const DIA_MS = 86_400_000
@@ -113,37 +113,69 @@ function TablaMetricas({ entrenamiento }) {
   const pred = entrenamiento?.prediccion
   if (!pred?.metricas) return <Vacio>Sin métricas.</Vacio>
   const filas = Object.entries(pred.metricas)
+  const semanal = filas.some(([, m]) => m.MAPE_semanal_pct != null)
   const cv = pred.validacion_cruzada_MAE_Wh || {}
+  const horizonte = pred.error_por_dia_horizonte_pct
+  const origenes = pred.evaluacion?.origenes?.length
+  const nombreFila = (nombre) => (
+    <>
+      {nombre}
+      {nombre === pred.tipo && <span className="ml-2 text-xs font-medium text-primario-700">en uso</span>}
+    </>
+  )
   return (
-    <div className="overflow-x-auto -mx-1">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="text-left text-slate-500">
-            <th className="font-medium py-2 px-1">Opción</th>
-            <th className="font-medium py-2 px-1 text-right">Error por hora</th>
-            <th className="font-medium py-2 px-1 text-right">Error diario</th>
-            <th className="font-medium py-2 px-1 text-right">Validación cruzada</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {filas.map(([nombre, m]) => {
-            const elegido = nombre === pred.tipo
-            return (
-              <tr key={nombre} className={elegido ? 'font-semibold text-slate-900' : 'text-slate-700'}>
-                <td className="py-2 px-1">
-                  {nombre}
-                  {elegido && <span className="ml-2 text-xs font-medium text-primario-700">en uso</span>}
-                </td>
+    <div className="space-y-5">
+      <div className="overflow-x-auto -mx-1">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-slate-500">
+              <th className="font-medium py-2 px-1">Opción</th>
+              <th className="font-medium py-2 px-1 text-right">Error por hora</th>
+              {semanal && <th className="font-medium py-2 px-1 text-right">Error semanal</th>}
+              <th className="font-medium py-2 px-1 text-right">Error diario</th>
+              {!semanal && <th className="font-medium py-2 px-1 text-right">Validación cruzada</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filas.map(([nombre, m]) => (
+              <tr key={nombre} className={nombre === pred.tipo ? 'font-semibold text-slate-900' : 'text-slate-700'}>
+                <td className="py-2 px-1">{nombreFila(nombre)}</td>
                 <td className="py-2 px-1 text-right num">{fmtNumero(m.MAE_Wh, 1)} Wh</td>
+                {semanal && <td className="py-2 px-1 text-right num">{fmtNumero(m.MAPE_semanal_pct, 1)} %</td>}
                 <td className="py-2 px-1 text-right num">{fmtNumero(m.MAPE_diario_pct, 1)} %</td>
-                <td className="py-2 px-1 text-right num">{cv[nombre] != null ? `${fmtNumero(cv[nombre], 1)} Wh` : '--'}</td>
+                {!semanal && <td className="py-2 px-1 text-right num">{cv[nombre] != null ? `${fmtNumero(cv[nombre], 1)} Wh` : '--'}</td>}
               </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <p className="text-xs text-slate-500 mt-3">
-        Semana de prueba que el modelo no vio al entrenar. "Semana pasada" y "Promedio 7 días" son referencias sin IA.
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {horizonte && (
+        <div className="overflow-x-auto -mx-1">
+          <p className="text-[13px] font-medium text-slate-700 px-1 mb-1">Error diario según el día de horizonte (%)</p>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="text-left text-slate-500">
+                <th className="font-medium py-2 px-1">Opción</th>
+                {[1, 2, 3, 4, 5, 6, 7].map((d) => <th key={d} className="font-medium py-2 px-1 text-right">Día {d}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {Object.entries(horizonte).map(([nombre, valores]) => (
+                <tr key={nombre} className={nombre === pred.tipo ? 'font-semibold text-slate-900' : 'text-slate-700'}>
+                  <td className="py-2 px-1 whitespace-nowrap">{nombreFila(nombre)}</td>
+                  {valores.map((v, i) => <td key={i} className="py-2 px-1 text-right num whitespace-nowrap">{fmtNumero(v, 1)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="text-xs text-slate-500">
+        {semanal
+          ? `Predicción semanal recursiva evaluada desde ${origenes || 'varios'} orígenes: cada semana se predijo con un modelo entrenado solo con los datos anteriores. "Semana pasada" y "Promedio 7 días" son referencias sin IA.`
+          : 'Semana de prueba que el modelo no vio al entrenar. "Semana pasada" y "Promedio 7 días" son referencias sin IA.'}
       </p>
     </div>
   )
@@ -154,6 +186,52 @@ function Dato({ titulo, children }) {
     <div className="min-w-0">
       <dt className="text-[13px] text-slate-500">{titulo}</dt>
       <dd className="text-sm font-medium text-slate-900 num mt-0.5">{children}</dd>
+    </div>
+  )
+}
+
+function DesempenoSemanal({ semanal }) {
+  if (!semanal || semanal.semanas_evaluadas === 0) {
+    return (
+      <Vacio>
+        Cada medianoche se guarda la predicción de los 7 días siguientes. Cuando esa semana termina, aparece aquí
+        junto a lo que realmente se consumió.
+      </Vacio>
+    )
+  }
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Dato titulo="Semanas evaluadas">{semanal.semanas_evaluadas}</Dato>
+        <Dato titulo="Error semanal promedio">{fmtNumero(semanal.mape_semanal_pct, 1)} %</Dato>
+        <Dato titulo="Error por hora">{fmtNumero(semanal.mae_wh, 1)} Wh</Dato>
+      </div>
+      <div className="overflow-x-auto -mx-1">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-slate-500">
+              <th className="font-medium py-2 px-1">Semana desde</th>
+              <th className="font-medium py-2 px-1 text-right">Real</th>
+              <th className="font-medium py-2 px-1 text-right">Predicho</th>
+              <th className="font-medium py-2 px-1 text-right">Error</th>
+              <th className="font-medium py-2 px-1 text-right hidden md:table-cell">Error día 1 → día 7</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-slate-700">
+            {[...semanal.semanas].reverse().map((s) => (
+              <tr key={s.origen}>
+                <td className="py-2 px-1">{fechaCorta(s.origen)}</td>
+                <td className="py-2 px-1 text-right num">{fmtNumero(s.real_kwh, 2)} kWh</td>
+                <td className="py-2 px-1 text-right num">{fmtNumero(s.predicho_kwh, 2)} kWh</td>
+                <td className="py-2 px-1 text-right num font-medium text-slate-900">{s.error_pct == null ? '--' : `${fmtNumero(s.error_pct, 1)} %`}</td>
+                <td className="py-2 px-1 text-right num text-slate-500 hidden md:table-cell">
+                  {(s.error_por_dia_pct || []).map((v) => (v == null ? '--' : fmtNumero(v, 0))).join(' · ')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -197,7 +275,7 @@ function DesempenoReal({ desempeno }) {
         </table>
       </div>
       <p className="text-xs text-slate-500">
-        Se compara la predicción hecha a medianoche (24 horas hacia adelante) con lo medido ese día.
+        Se compara el primer día de la predicción hecha a medianoche con lo medido ese día.
       </p>
     </div>
   )
@@ -212,6 +290,7 @@ export default function AlertasIA({ ia, nodos = [], tarifaKwh, energiaSemana, ur
   const [filtroNodo, setFiltroNodo] = useState('todos')
   const [dias, setDias] = useState('7')
   const [abierta, setAbierta] = useState(null)
+  const [modoPrediccion, setModoPrediccion] = useState('7d')
 
   const consultarEstado = useCallback(() => {
     api.modelos(urlBackend)
@@ -251,6 +330,8 @@ export default function AlertasIA({ ia, nodos = [], tarifaKwh, energiaSemana, ur
   const entrenamiento = estado?.entrenamiento
   const ejecucion = estado?.ejecucion
   const desempeno = estado?.desempeno_real
+  const semanal = estado?.desempeno_semanal
+  const semanaPred = semanaPrevista(prediccion)
   const sk = estado?.scikit_learn
   const cargados = estado ? estado.cargados : activo
 
@@ -271,26 +352,48 @@ export default function AlertasIA({ ia, nodos = [], tarifaKwh, energiaSemana, ur
           valor={cargados == null ? '--' : cargados ? 'Activos' : 'Inactivos'}
           nota={estado?.error || (entrenamiento ? `${entrenamiento.prediccion?.tipo} · ${fechaCorta(entrenamiento.creado)}` : 'Consultando...')}
         />
-        <Indicador
-          titulo="Próximas 24 horas"
-          icono="rayo"
-          valor={prediccion?.disponible ? fmtNumero(prediccion.total_24h_kwh, 2) : '--'}
-          unidad={prediccion?.disponible ? 'kWh' : null}
-          nota={prediccion?.disponible ? `${fmtMoneda(prediccion.total_24h_kwh * tarifaKwh)} previstos` : (prediccion?.motivo || ia.errorPrediccion || 'Calculando...')}
-        />
+        {semanaPred ? (
+          <Indicador
+            titulo="Próximos 7 días"
+            icono="rayo"
+            valor={fmtNumero(semanaPred.total, 1)}
+            unidad="kWh"
+            nota={`${fmtMoneda(semanaPred.total * tarifaKwh)} · hoy ~${fmtNumero(prediccion.hoy?.estimado_kwh, 2)} kWh`}
+          />
+        ) : (
+          <Indicador
+            titulo="Próximas 24 horas"
+            icono="rayo"
+            valor={prediccion?.disponible ? fmtNumero(prediccion.total_24h_kwh, 2) : '--'}
+            unidad={prediccion?.disponible ? 'kWh' : null}
+            nota={prediccion?.disponible ? `${fmtMoneda(prediccion.total_24h_kwh * tarifaKwh)} previstos` : (prediccion?.motivo || ia.errorPrediccion || 'Calculando...')}
+          />
+        )}
         <Indicador
           titulo="Alertas en 7 días"
           icono="alerta"
           valor={semana.length}
           nota={semana.length ? `La última ${fmtHaceCuanto(Date.parse(semana[0].inicio))}` : 'Ninguna hora anómala'}
         />
-        <Indicador
-          titulo="Error real diario"
-          icono="diana"
-          valor={desempeno?.mape_diario_pct != null ? fmtNumero(desempeno.mape_diario_pct, 1) : '--'}
-          unidad={desempeno?.mape_diario_pct != null ? '%' : null}
-          nota={desempeno?.dias_evaluados ? `Promedio de ${desempeno.dias_evaluados} ${desempeno.dias_evaluados === 1 ? 'día' : 'días'}` : 'Se mide desde la próxima medianoche'}
-        />
+        {semanal?.semanas_evaluadas ? (
+          <Indicador
+            titulo="Error real semanal"
+            icono="diana"
+            valor={fmtNumero(semanal.mape_semanal_pct, 1)}
+            unidad="%"
+            nota={`Promedio de ${semanal.semanas_evaluadas} ${semanal.semanas_evaluadas === 1 ? 'semana' : 'semanas'}`}
+          />
+        ) : (
+          <Indicador
+            titulo="Error real diario"
+            icono="diana"
+            valor={desempeno?.mape_diario_pct != null ? fmtNumero(desempeno.mape_diario_pct, 1) : '--'}
+            unidad={desempeno?.mape_diario_pct != null ? '%' : null}
+            nota={desempeno?.dias_evaluados
+              ? `Promedio de ${desempeno.dias_evaluados} ${desempeno.dias_evaluados === 1 ? 'día' : 'días'}`
+              : 'Se mide desde la próxima medianoche'}
+          />
+        )}
       </div>
 
       <Tarjeta
@@ -327,12 +430,18 @@ export default function AlertasIA({ ia, nodos = [], tarifaKwh, energiaSemana, ur
       </Tarjeta>
 
       <Tarjeta
-        titulo="Predicción de las próximas 24 horas"
+        titulo={modoPrediccion === '7d' ? 'Predicción de los próximos 7 días' : 'Predicción de las próximas 24 horas'}
         descripcion={prediccion?.disponible
-          ? `Random Forest, calculada ${fmtHaceCuanto(Date.parse(prediccion.generada))}. Historia completa: ${fmtNumero(prediccion.historia_completa_pct, 0)} %.`
-          : 'Energía prevista por hora y aparato.'}
+          ? `${prediccion.modelo || 'Modelo'}${modoPrediccion === '7d' ? ' encadenado día a día' : ''}, calculada ${fmtHaceCuanto(Date.parse(prediccion.generada))}. Historia completa: ${fmtNumero(prediccion.historia_completa_pct, 0)} %.`
+          : 'Energía prevista por aparato.'}
       >
-        <BarrasPrediccion prediccion={prediccion} nodos={nodos} tarifaKwh={tarifaKwh} />
+        <div className="flex flex-wrap gap-2 mb-3">
+          <Selector value={modoPrediccion} onChange={setModoPrediccion} etiqueta="Horizonte">
+            <option value="7d">Próximos 7 días</option>
+            <option value="24h">Próximas 24 horas</option>
+          </Selector>
+        </div>
+        <BarrasPrediccion prediccion={prediccion} nodos={nodos} tarifaKwh={tarifaKwh} modo={modoPrediccion} />
       </Tarjeta>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5">
@@ -377,9 +486,14 @@ export default function AlertasIA({ ia, nodos = [], tarifaKwh, energiaSemana, ur
         </Tarjeta>
       </div>
 
-      <Tarjeta titulo="Predicción frente a consumo real" descripcion="Cómo le va al modelo con los datos nuevos, día por día.">
-        <DesempenoReal desempeno={desempeno} />
-      </Tarjeta>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5">
+        <Tarjeta titulo="Predicción semanal frente a consumo real" descripcion="Cada semana predicha a medianoche, comparada con lo medido.">
+          <DesempenoSemanal semanal={semanal} />
+        </Tarjeta>
+        <Tarjeta titulo="Predicción del día frente a consumo real" descripcion="El primer día de cada predicción, día por día.">
+          <DesempenoReal desempeno={desempeno} />
+        </Tarjeta>
+      </div>
     </div>
   )
 }

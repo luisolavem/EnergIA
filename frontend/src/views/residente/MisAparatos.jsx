@@ -1,7 +1,7 @@
 // Mis aparatos (residente): cuánto cuesta cada aparato, sin datos técnicos.
 import { EstadoTexto, Icono, PuntoAparato, Vacio } from '../../components/ui.jsx'
 import { fmtMoneda, fmtNumero } from '../../lib/formato.js'
-import { TIPOS_RESIDENTE, conPunto, diaRelativo, franja, restoDelDia } from '../../lib/ia.js'
+import { TIPOS_RESIDENTE, conPunto, diaRelativo, franja, restoDelDia, semanaPrevista } from '../../lib/ia.js'
 import { estadoResidente } from '../../lib/nodos.js'
 
 const DIA_MS = 86_400_000
@@ -24,6 +24,7 @@ export default function MisAparatos({ nodos = [], tarifaKwh, conectado, energiaH
   const semana = energiaSemana.datos
   const dias = semana ? Math.max(1, (Date.now() - Date.parse(semana.desde)) / DIA_MS) : null
   const resto = restoDelDia(ia?.prediccion)
+  const semanaIA = semanaPrevista(ia?.prediccion)
   // Último aviso de consumo (alto o bajo) de cada aparato en las últimas 24 horas
   const avisoDe = {}
   for (const a of ia?.alertas || []) {
@@ -43,6 +44,7 @@ export default function MisAparatos({ nodos = [], tarifaKwh, conectado, energiaH
           const diario = kwhSemana != null && dias ? kwhSemana / dias : null
           const finDia = hoy != null && resto ? hoy + (resto.porNodo[n.id] || 0) : null
           const aviso = avisoDe[n.id]
+          const semanaNodo = semanaIA ? semanaIA.porNodo[n.id] : null
           return (
             <article key={n.id} className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-5">
               <div className="flex items-start justify-between gap-2">
@@ -60,10 +62,15 @@ export default function MisAparatos({ nodos = [], tarifaKwh, conectado, energiaH
                 <Cifra titulo="Por día" valor={diario == null ? '--' : fmtMoneda(diario * tarifaKwh)} nota="promedio" />
                 <Cifra titulo="Al mes" valor={diario == null ? '--' : fmtMoneda(diario * 30 * tarifaKwh)} nota="estimado" />
               </div>
-              {finDia != null && (
-                <p className="text-[13px] text-slate-600 mt-4 inline-flex items-center gap-1.5">
-                  <span className="text-slate-400"><Icono nombre="ia" className="w-4 h-4" /></span>
-                  Al final del día: <span className="font-semibold text-slate-900">~{fmtMoneda(finDia * tarifaKwh)}</span>
+              {(finDia != null || semanaNodo != null) && (
+                <p className="text-[13px] text-slate-600 mt-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="text-slate-400 -mr-2.5"><Icono nombre="ia" className="w-4 h-4" /></span>
+                  {finDia != null && (
+                    <span>Al final del día: <span className="font-semibold text-slate-900">~{fmtMoneda(finDia * tarifaKwh)}</span></span>
+                  )}
+                  {semanaNodo != null && (
+                    <span>Próximos 7 días: <span className="font-semibold text-slate-900">~{fmtMoneda(semanaNodo * tarifaKwh)}</span></span>
+                  )}
                 </p>
               )}
               {aviso && (

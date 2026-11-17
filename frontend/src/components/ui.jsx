@@ -1,17 +1,30 @@
 // Piezas visuales compartidas (estilo sobrio: fondos neutros, bordes suaves,
 // un solo color de acento y etiquetas con una barra de color a la izquierda).
 
+// Logo de EnergIA: hoja con rayo. Toma los colores del tema activo: la hoja usa el
+// color secundario (esmeralda en el tema predeterminado) y el rayo el tono de los
+// títulos, que en el tema oscuro se vuelve claro.
+const HOJA = 'M521 58 C360 68 196 140 189 272 C188 302 196 328 212 348 L386 171 L358 229 L492 229 C510 190 525 120 524 68 Z'
+const RAYO = 'M340 265 L470 265 L322 424 L358 318 L291 318 Z'
+
+export function LogoEnergia({ className = 'w-9 h-9' }) {
+  return (
+    <svg className={className} viewBox="180 50 352 380" aria-hidden="true">
+      <path d={HOJA} className="fill-secundario-500 stroke-secundario-500" strokeWidth="6" strokeLinejoin="round" />
+      <path d={RAYO} className="fill-slate-900 stroke-slate-900" strokeWidth="6" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function Marca({ tamano = 'normal' }) {
   const grande = tamano === 'grande'
   return (
-    <div className="flex items-center gap-3">
-      <div className={`${grande ? 'w-10 h-10' : 'w-9 h-9'} rounded-xl bg-primario-500 text-white flex items-center justify-center flex-shrink-0`}>
-        <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
-        </svg>
-      </div>
+    <div className="flex items-center gap-2.5">
+      <LogoEnergia className={`${grande ? 'w-11 h-11' : 'w-9 h-9'} flex-shrink-0`} />
       <div className="leading-tight">
-        <p className={`font-semibold text-slate-900 ${grande ? 'text-lg' : 'text-[15px]'}`}>EnergIA</p>
+        <p className={`font-bold tracking-tight text-slate-900 ${grande ? 'text-xl' : 'text-[17px]'}`}>
+          Energ<span className="text-secundario-500">IA</span>
+        </p>
         <p className="text-xs text-slate-500">Monitoreo del hogar</p>
       </div>
     </div>
