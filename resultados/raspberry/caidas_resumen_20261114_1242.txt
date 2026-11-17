@@ -1,0 +1,36 @@
+Transcripción de la salida de consola (esta corrida no guardó archivo en resultados/; el detalle está en caidas.csv).
+$ /home/luisool/venv/bin/python pruebas_capitulo3.py caidas --dias 45 --csv caidas.csv
+Detalle de las 2596 desconexiones guardado en caidas.csv
+
+Desconexiones de 2 min o más · 30-Sep a 14-Nov 12:42
+Total 2596; 40 con un reinicio del backend en medio (duración no confiable, se excluyen del resumen).
+
+Por nodo:
+nodo              desconexiones  horas   mediana_min  max_h  cortes_luz  lecturas_recuperadas
+----------------  -------------  ------  -----------  -----  ----------  --------------------
+nodo_1 (Nevera1)  178            134.0   4.0          30.5   7           104740
+nodo_2 (Nevera2)  445            672.8   7.7          66.7   7           151440
+nodo_3 (Router)   543            350.3   4.8          30.5   9           274290
+nodo_4 (PC)       1142           230.5   3.2          30.5   9           86620
+nodo_5 (TVyDeco)  248            354.1   5.9          48.4   6           119320
+TODOS             2556           1741.7  3.2          66.7   38          736410
+
+Por duración (solo red/Wi-Fi; recuperación medida en Router y TV, que siempre están encendidos):
+duracion    desconexiones  casos_router_tv  recuperado_mediana_%  con_recuperacion_>=90%
+----------  -------------  ---------------  --------------------  ----------------------
+< 5 min     1658           375              72.9                  97
+5-30 min    591            278              83.2                  85
+30 min-2 h  147            69               82.4                  17
+2-24 h      109            50               12.6                  14
+> 24 h      13             4                0.0                   0
+
+Motivo de la reconexión:
+motivo            veces
+----------------  -----
+reconexion        1475
+recuperacion_red  1065
+encendido         12
+watchdog          3
+error             1
+
+Las lecturas dentro de una desconexión solo pudieron llegar por el reenvío (backfill) del nodo.

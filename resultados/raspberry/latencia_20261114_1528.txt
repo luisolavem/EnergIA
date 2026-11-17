@@ -1,0 +1,60 @@
+$ pruebas_capitulo3.py latencia --dias 45
+  30-Sep listo
+  01-Oct listo
+  02-Oct listo
+  03-Oct listo
+  04-Oct listo
+  05-Oct listo
+  06-Oct listo
+  07-Oct listo
+  08-Oct listo
+  09-Oct listo
+  10-Oct listo
+  11-Oct listo
+  12-Oct listo
+  13-Oct listo
+  14-Oct listo
+  15-Oct listo
+  16-Oct listo
+  17-Oct listo
+  18-Oct listo
+  19-Oct listo
+  20-Oct listo
+  21-Oct listo
+  22-Oct listo
+  23-Oct listo
+  24-Oct listo
+  25-Oct listo
+  26-Oct listo
+  27-Oct listo
+  28-Oct listo
+  29-Oct listo
+  30-Oct listo
+  31-Oct listo
+  01-Nov listo
+  02-Nov listo
+  03-Nov listo
+  04-Nov listo
+  05-Nov listo
+  06-Nov listo
+  07-Nov listo
+  08-Nov listo
+  09-Nov listo
+  10-Nov listo
+  11-Nov listo
+  12-Nov listo
+  13-Nov listo
+
+Latencia de extremo a extremo (nodo -> backend) · InfluxDB, 30-Sep 15:28 a 14-Nov 15:28
+
+nodo              lecturas   mediana_ms  P95_ms  P99_ms  max_ms  <=2s_%
+----------------  ---------  ----------  ------  ------  ------  ------
+nodo_1 (Nevera1)  749.202    5           330     3290    32650   98.32 
+nodo_2 (Nevera2)  61.159     75          3471    9234    28815   92.04 
+nodo_3 (Router)   698.644    11          2554    7797    36576   93.79 
+nodo_4 (PC)       273.208    40          2602    8415    32433   93.83 
+nodo_5 (TVyDeco)  725.974    54          2136    7869    32902   94.77 
+TODOS             2.508.187  24          1729    6943    36576   95.39 
+
+Percentiles con resolución de 5 ms hasta 1 s y 50 ms hasta 5 s.
+Solo tienen latencia las lecturas en tiempo real con hora del nodo confiable (no el reenvío).

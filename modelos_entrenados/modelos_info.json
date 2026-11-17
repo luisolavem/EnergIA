@@ -1,0 +1,160 @@
+{
+  "creado": "2026-11-12T12:17:42",
+  "versiones": {
+    "scikit-learn": "1.6.1",
+    "pandas": "2.2.3",
+    "numpy": "2.4.6"
+  },
+  "datos": {
+    "desde": "2026-09-29 14:00:00",
+    "hasta": "2026-10-27 00:00:00",
+    "horas": 658,
+    "aparatos": [
+      "Nevera1",
+      "Nevera2",
+      "Router",
+      "PC",
+      "TVyDeco"
+    ]
+  },
+  "prediccion": {
+    "archivo": "modelo_prediccion.joblib",
+    "tipo": "Random Forest",
+    "objetivo": "kwh por hora y aparato",
+    "horizonte_horas": 168,
+    "estrategia": "recursiva por bloques de 24 h",
+    "variables": [
+      "hora_sin",
+      "hora_cos",
+      "dia_sin",
+      "dia_cos",
+      "fin_de_semana_o_festivo",
+      "lag24",
+      "lag48",
+      "lag168",
+      "media_dia_anterior",
+      "media_misma_hora_7d",
+      "es_Nevera1",
+      "es_Nevera2",
+      "es_Router",
+      "es_PC",
+      "es_TVyDeco"
+    ],
+    "evaluacion": {
+      "tipo": "origen móvil",
+      "origenes": [
+        "2026-10-14",
+        "2026-10-15",
+        "2026-10-16",
+        "2026-10-17",
+        "2026-10-18",
+        "2026-10-19",
+        "2026-10-20"
+      ],
+      "semana_prueba": "2026-10-20"
+    },
+    "metricas": {
+      "Semana pasada": {
+        "MAE_Wh": 14.45,
+        "MAPE_semanal_pct": 1.57,
+        "MAPE_diario_pct": 8.25
+      },
+      "Promedio 7 días": {
+        "MAE_Wh": 13.27,
+        "MAPE_semanal_pct": 1.57,
+        "MAPE_diario_pct": 8.93
+      },
+      "Random Forest": {
+        "MAE_Wh": 14.07,
+        "MAPE_semanal_pct": 7.79,
+        "MAPE_diario_pct": 12.93
+      },
+      "HistGradientBoosting": {
+        "MAE_Wh": 15.49,
+        "MAPE_semanal_pct": 11.21,
+        "MAPE_diario_pct": 16.26
+      }
+    },
+    "error_por_dia_horizonte_pct": {
+      "Semana pasada": [
+        7.87,
+        8.22,
+        8.32,
+        8.94,
+        9.12,
+        7.96,
+        7.34
+      ],
+      "Promedio 7 días": [
+        6.74,
+        6.53,
+        8.01,
+        9.09,
+        10.55,
+        10.9,
+        10.65
+      ],
+      "Random Forest": [
+        7.55,
+        8.82,
+        12.31,
+        14.43,
+        16.43,
+        15.19,
+        15.77
+      ],
+      "HistGradientBoosting": [
+        9.04,
+        13.03,
+        14.51,
+        17.79,
+        21.45,
+        18.76,
+        19.28
+      ]
+    },
+    "metricas_por_aparato": {
+      "Nevera1": {
+        "MAE_Wh": 21.06,
+        "MAPE_semanal_pct": 14.86
+      },
+      "Nevera2": {
+        "MAE_Wh": 17.04,
+        "MAPE_semanal_pct": 24.74
+      },
+      "TVyDeco": {
+        "MAE_Wh": 8.01,
+        "MAPE_semanal_pct": 14.14
+      },
+      "PC": {
+        "MAE_Wh": 23.59,
+        "MAPE_semanal_pct": 45.01
+      },
+      "Router": {
+        "MAE_Wh": 0.64,
+        "MAPE_semanal_pct": 1.35
+      }
+    }
+  },
+  "anomalias": {
+    "archivo": "modelo_anomalias.joblib",
+    "tipo": "IsolationForest por aparato",
+    "variables": [
+      "kwh",
+      "pct_encendido",
+      "arranques",
+      "p_encendido_media",
+      "hora_sin",
+      "hora_cos"
+    ],
+    "percentil_umbral": 1.0,
+    "umbrales": {
+      "Nevera1": -0.139434,
+      "Nevera2": -0.127145,
+      "TVyDeco": -0.153875,
+      "PC": -0.149811,
+      "Router": -0.185513
+    }
+  },
+  "tarifa_cop_kwh": 850
+}

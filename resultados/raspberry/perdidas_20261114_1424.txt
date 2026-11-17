@@ -1,0 +1,18 @@
+Transcripción de la salida de consola (esta corrida no guardó archivo en resultados/).
+$ /home/luisool/venv/bin/python pruebas_capitulo3.py perdidas --minutos 60   (detenida con Ctrl+C a los 50 min)
+
+Escuchando la telemetría 60 minutos desde 14:24 (Ctrl+C para terminar antes)...
+^C
+Pérdida de mensajes MQTT en tránsito · 14-Nov 14:24 a 15:14
+
+nodo              recibidos  perdidos_transito  saltos  perdida_%  desconexiones  msj_en_desconexion  reinicios
+----------------  ---------  -----------------  ------  ---------  -------------  ------------------  ---------
+nodo_2 (Nevera2)  158        0                  0       0.0        5              17                  0
+nodo_3 (Router)   1098       0                  0       0.0        7              51                  0
+nodo_4 (PC)       1276       0                  0       0.0        11             56                  1
+nodo_5 (TVyDeco)  992        0                  0       0.0        11             48                  0
+TODOS             3524       0                          0.0                       172
+
+Pérdida en tránsito: saltos de hasta 5 mensajes sin desconexión del nodo. Los mensajes
+de una desconexión (msj_en_desconexion) no cuentan aquí: se evalúan en la resiliencia (caidas).
+Un nodo con el aparato en reposo no publica telemetría y no aparece.

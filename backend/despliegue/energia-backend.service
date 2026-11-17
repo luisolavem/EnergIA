@@ -1,0 +1,15 @@
+[Unit]
+Description=Backend Energy Monitor (FastAPI)
+After=network-online.target mosquitto.service influxdb.service
+Wants=network-online.target
+
+[Service]
+User=luisool
+WorkingDirectory=/home/luisool/backend_iot
+EnvironmentFile=-/home/luisool/backend_iot/.env
+ExecStart=/home/luisool/venv/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

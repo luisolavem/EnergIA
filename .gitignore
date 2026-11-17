@@ -32,3 +32,7 @@ modelos_EnergIA.zip
 Thumbs.db
 desktop.ini
 .vscode/
+
+!backend/.env.example
+!modelos_entrenados/*.joblib
+!resultados/raspberry/caidas.csv
